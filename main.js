@@ -1,16 +1,17 @@
 const express = require('express');
 const axios = require('axios');
 const fs = require('fs')
-const readline = require('readline')
 const lineReader = require('line-reader');
 const bodyParser = require('body-parser');
-const { count } = require('console');
-const { response } = require('express');
-
-const PORT = process.argv[2];
-
+const socketio = require('socket.io')
+const http = require('http')
 const app = express()
+const server = http.createServer(app)
+const io = socketio(server)
+
 app.use(express.json({limit: '5mb'}));
+app.use(express.static('public'))
+const PORT = process.argv[2];
 
 let isLeader;
 //PARA INSTANCIAS EN GENERAL
@@ -107,26 +108,19 @@ async function sendData(dataToSend, afterURL) {
             }
         }).then(response => {
             console.log('Resultado:', response.data)
-            //Enviar documento a todos...
             if(afterURL == 'file_word_repeat'){
                 //Solo llega al que le tocó
                 console.log('cuando se crea el archivo nomás')
                 countVotes = 0;
                 sendData(response.data, 'document_pow')
-                //console.log('votos cofirmando: ', countVotes)
-                //console.log(`Los votos confirmando son ${countVotes} de ${serverList.length} posibles`)
             }
             if(afterURL == 'document_pow'){
                 //Aqui debe llegar un true o false
                 console.log('Respuesta booleana: ', response.data)
                 if(response.data){
                     countVotes++;
-                    //Esto es correcto....
                     console.log('Correcto')
                 }
-                //Ellos validan si está correcto...
-                //Cada uno vota
-                //Se registra el pixel
             }
         }).catch(err => {
             console.log("No elegido para hacer la tarea...")
@@ -151,42 +145,35 @@ async function countVotesF() {
     }
 }
 //hola1 repite 4
-async function generateNewPixel(){
+async function generateNewPixel(x, y, color){
     wordListCurrent = []
     await getData('new_word')
     //contar la palabra más repetida.
     let result = sortWordRepeated()
     if(result.length != 1){
         //console.log('toca hacerlo de nuevo D:') va para el log!!!
-        generateNewPixel();
+        generateNewPixel(x, y, color);
         return;
     }
     //registrar en tareas pendientes.
     let numberRandomWrite = getRandomInt(90000, 100000)
     let currentTask = {server:serverList[getRandomInt(0, serverList.length)].path, 
         work: `Escribir la palabra ${result[0].name} ${numberRandomWrite} veces`, 
-        word: result[0].name, number: numberRandomWrite, pixel: {x:0, y:0}, color: 'ffffff'}
+        word: result[0].name, number: numberRandomWrite, pixel: {x:x, y:y}, color: color}
     console.log(currentTask)
     //Escribir archivo con n lineas con esa palabra pero en host que designa aleatoriamente.
     await sendData(currentTask, 'file_word_repeat')
-    //enviarle a todos esa palabra para que voten
-    //Si vota a favor más de la mitad, cofirmar
 }
 
 //PARA EL LIDER
 //Solicitar palabra de cada instancia.
 app.get('/new_pixel', async (req, res) => {
-    await generateNewPixel()
+    console.log(`${req.query.x}---${req.query.y}`)
+    //currentX = req.query.x;
+    //currentY = req.query.y;
+    await generateNewPixel(req.query.x, req.query.y, req.query.color)
     res.sendStatus(200)
 })
-
-//métodos
-//editar obra 
-    //Consenso de la palabra.
-    //Escribir palabra en un archivo 100000 veces.
-    //Se va a la lista de tareas pendientes.
-    //Validación de obra de arte.
-    //Registrar pixel en la GUI.
 
 //consultar copia de la obra de arte.
     //Validar si la copia de seguridad de la instancia es la misma a la de todos los demás
@@ -212,8 +199,6 @@ app.post('/file_word_repeat', async (req, res) => {
 app.post('/document_pow', async (req, res) => {
     //LLega el documento así que se convierte a documento
     base64_decode(req.body.data, 'validation.txt')
-    //se compara con la lista de tareas.
-        //Se lee el archivo
     let pow = await validateProofOfWork(pendingTasks[pendingTasks.length-1].word)
     console.log('pow', pow)
     if(await pow == pendingTasks[pendingTasks.length-1].number){
@@ -222,8 +207,6 @@ app.post('/document_pow', async (req, res) => {
     }else{
         res.send(false)
     }
-    //se envia un booleano si cumple o no
-    
 })
 
 function createFile(number, word){
@@ -233,23 +216,6 @@ function createFile(number, word){
     }
 }
 
-/*
-function validateProofOfWork(word) {
-    let count = 0;
-    lineReader.eachLine('validation.txt', function(line, last) {
-        if(word == line){
-            count++;
-            console.log(line);
-            console.log(count);
-            if(last){
-                console.log('last', last);
-                console.log('retorna ', count);
-                return count
-            }
-        }
-    })
-}
-*/
 function validateProofOfWork(word){
     let count = 0;
     return new Promise((resolve, reject) => {
@@ -287,7 +253,6 @@ app.get('/randomNumber', (req, res) => {
 
 app.post('/updateData', (req, res) => {
     //crea la copia de seguridad
-    //copia de la obra. Pixel con su id
     //[{pixel:{x:5, y:10}, id:'50-40-43'}]
     keyArtWork.push({pixel:{x:pendingTasks[pendingTasks.length-1].pixel.x, y:pendingTasks[pendingTasks.length-1].pixel.y},
          id: req.body.data})
@@ -296,10 +261,20 @@ app.post('/updateData', (req, res) => {
     //[{pixel: {x:5, y:10}, color: 'red'}]
     artWork.push({pixel:{x:pendingTasks[pendingTasks.length-1].pixel.x, y:pendingTasks[pendingTasks.length-1].pixel.y}, 
         color: pendingTasks[pendingTasks.length-1].color})
-    //la obra de arte
     res.send('ok ;)')
 })
 
-app.listen(PORT, () => {
+io.on('connection', function (socket) {
+    //socket.disconnected = true;
+    //socket.connected = false;
+    console.log(`client: ${socket.id}`)
+    //enviando al cliente
+    setInterval(() => {
+        //socket.emit('server/random', getDateTime())
+        socket.emit('server/list_art_work', artWork)
+    }, 3000)
+})
+
+server.listen(PORT, () => {
     console.log(`Example app listening at http://localhost:${PORT}`)
 })

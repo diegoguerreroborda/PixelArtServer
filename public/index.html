@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Cuadrícula</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js"></script>
+</head>
+<body>
+  <div id="Contenedor">
+    <h1><p>Grid Canvas</p></h1>
+    <div id="contenedorCanvas">
+      <canvas id="canvas1" width="600" height="600">
+        Tu navegador no soporta canvas
+      </canvas>
+    </div>
+    <div id="herramientas">
+      Color: <input type="color" id="color" value="#FF0000"/>
+    </div>
+  </div>
+  <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+</body>
+</html>
