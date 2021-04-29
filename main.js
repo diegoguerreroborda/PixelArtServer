@@ -5,6 +5,7 @@ const readline = require('readline')
 const lineReader = require('line-reader');
 const bodyParser = require('body-parser');
 const { count } = require('console');
+const { response } = require('express');
 
 const PORT = process.argv[2];
 
@@ -30,6 +31,7 @@ let serverList = [{path: "http://localhost:3000/", isLeader:true}, {path: "http:
 
 //Datos lider
 let wordListCurrent;
+let keyCurrent;
 let countVotes;
 
 function base64_decode(base64str, file) {
@@ -79,10 +81,14 @@ async function getData(afterURL){
     for (const server in serverList) {
         try {
             console.log(`${serverList[server].path}${afterURL}`)
-            response = await axios(`${serverList[server].path}${afterURL}`)
+            let response = await axios(`${serverList[server].path}${afterURL}`)
             console.log(response.data)
             if(afterURL == 'new_word'){
                 wordListCurrent.push(response.data)
+            }
+            if(afterURL == 'randomNumber'){
+                console.log('holaaaa???')
+                keyCurrent += response.data
             }
         } catch(err) {
             console.log('err.Error')
@@ -128,7 +134,21 @@ async function sendData(dataToSend, afterURL) {
     }
     if(afterURL == 'document_pow'){
         console.log(`Los votos confirmando son ${countVotes} de ${serverList.length} posibles.`)
+        //Si hay más de la mitad crear el pixel
+        countVotesF();
     }   
+}
+
+async function countVotesF() {
+    if(countVotes > (serverList.length / 2)){
+        console.log('Se ha confirmado el pixel')
+        keyCurrent = '';
+        await getData('randomNumber')
+        console.log('keyCurrent', keyCurrent)
+        await sendData(keyCurrent, 'updateData')
+        //enviar data aqui creo o con webSockets mejor
+        return;
+    }
 }
 //hola1 repite 4
 async function generateNewPixel(){
@@ -171,10 +191,6 @@ app.get('/new_pixel', async (req, res) => {
 //consultar copia de la obra de arte.
     //Validar si la copia de seguridad de la instancia es la misma a la de todos los demás
     //validar si el archivo con los pixeles es igual a la de todos los demás
-
-app.get('/new_word', (req, res) => {
-    res.send(wordList[getRandomInt(0, wordList.length)])
-})
 
 app.post('/file_word_repeat', async (req, res) => {
     console.log('*********************')
@@ -234,17 +250,6 @@ function validateProofOfWork(word) {
     })
 }
 */
-/*
-function validateProofOfWork() {
-    let count = 0;
-    await lineReader.eachLine('validation.txt', function(line) {
-        count++;
-        console.log(line);
-        console.log(count);
-    })
-    return count
-}
-*/
 function validateProofOfWork(word){
     let count = 0;
     return new Promise((resolve, reject) => {
@@ -259,8 +264,10 @@ function validateProofOfWork(word){
     });
 }
 
-//console.log(validateProofOfWork('ohlsd').then(console.log('count')))
-//console.log('retornaaaa ', validateProofOfWork())
+app.get('/new_word', (req, res) => {
+    console.log('newWord', wordList[getRandomInt(0, wordList.length)])
+    res.send(wordList[getRandomInt(0, wordList.length)])
+})
 
 app.get('/artWork', (req, res) => {
     res.send(artWork)
@@ -268,6 +275,29 @@ app.get('/artWork', (req, res) => {
 
 app.get('/keyArtWork', (req, res) => {
     res.send(keyArtWork)
+})
+
+app.get('/pendingTasks', (req, res) => {
+    res.send(pendingTasks)
+})
+
+app.get('/randomNumber', (req, res) => {
+    res.send(`${getRandomInt(0,100)}-`)
+})
+
+app.post('/updateData', (req, res) => {
+    //crea la copia de seguridad
+    //copia de la obra. Pixel con su id
+    //[{pixel:{x:5, y:10}, id:'50-40-43'}]
+    keyArtWork.push({pixel:{x:pendingTasks[pendingTasks.length-1].pixel.x, y:pendingTasks[pendingTasks.length-1].pixel.y},
+         id: req.body.data})
+
+    //Obra de arte
+    //[{pixel: {x:5, y:10}, color: 'red'}]
+    artWork.push({pixel:{x:pendingTasks[pendingTasks.length-1].pixel.x, y:pendingTasks[pendingTasks.length-1].pixel.y}, 
+        color: pendingTasks[pendingTasks.length-1].color})
+    //la obra de arte
+    res.send('ok ;)')
 })
 
 app.listen(PORT, () => {
