@@ -1,24 +1,46 @@
 <!DOCTYPE html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <title>Cuadrícula</title>
-  <link rel="stylesheet" href="style.css">
-  <script src="app.js"></script>
-</head>
-<body>
-  <div id="Contenedor">
-    <h1><p>Grid Canvas</p></h1>
-    <div id="contenedorCanvas">
-      <canvas id="canvas1" width="600" height="600">
-        Tu navegador no soporta canvas
-      </canvas>
+  <head>
+    <meta charset="utf-8" />
+    <title>Cuadrícula</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
+  </head>
+  <body>
+    <div id="Contenedor">
+      <h1><p>Grid Canvas</p></h1>
+      <div id="contenedorCanvas">
+        <canvas id="canvas1" width="600" height="600">
+          Tu navegador no soporta canvas
+        </canvas>
+      </div>
+      <div id="herramientas">
+        Color: <input type="color" id="color" value="#FF0000" />
+      </div>
     </div>
-    <div id="herramientas">
-      Color: <input type="color" id="color" value="#FF0000"/>
+    <div id="h">
+      <a class="boton_personalizado" onclick="validate()">Validar</a>
+      <p class="resultValidate" id="txtResult"></p>
     </div>
-  </div>
-  <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
-  <script src="/socket.io/socket.io.js"></script>
-</body>
+    <div class="divTable" id="app-2">
+      <table class="table1">
+        <thead>
+          <tr>
+            <th>X</th>
+            <th>Y</th>
+            <th>Id</th>
+          </tr>
+        </thead>
+        <tr class="list-group-item" v-for="data in data_keys">
+          <td>{{ data.x }}</td>
+          <td>{{ data.y }}</td>
+          <td>{{ data.id }}</td>
+        </tr>
+      </table>
+    </div>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.10/lodash.min.js"></script>
+    <script src="app.js"></script>
+  </body>
 </html>

@@ -1,11 +1,17 @@
-
+var app2 = new Vue({
+  el: "#app-2",
+  data: {
+    data_keys: [],
+  },
+});
+let keyData = [];
 window.onload = function () {
   var mouse = false;
   var canvas = document.getElementById("canvas1");
   var contenedor = document.getElementById("Contenedor");
   var cuadritos = [];
   var sizeCuadro = { ancho: 100, alto: 100 };
-  
+
   var inputColor = document.getElementById("color");
   var inputSizeCuadros = document.getElementById("sizeCuadros");
 
@@ -49,65 +55,67 @@ window.onload = function () {
       }
 
       function fillCell(x, y, colorC) {
-        console.log('x: ', x, 'y: ', y);
+        console.log("x: ", x, "y: ", y);
         //console.log(cuadritos);
         ctx.fillStyle = colorC;
         for (i = 0; i < cuadritos.length; i++) {
           var cuadro = cuadritos[i];
-          if(x == cuadro[4] && y == cuadro[5]){
+          if (x == cuadro[4] && y == cuadro[5]) {
             //console.log('cuadro  ', cuadro);
-              ctx.fillRect(
-                cuadro[0],
-                cuadro[1],
-                sizeCuadro.ancho,
-                sizeCuadro.alto
-              );
-              console.log('x_select ', x_select);
-              console.log('y_select ', y_select);
-              break;
+            ctx.fillRect(
+              cuadro[0],
+              cuadro[1],
+              sizeCuadro.ancho,
+              sizeCuadro.alto
+            );
+            console.log("x_select ", x_select);
+            console.log("y_select ", y_select);
+            break;
           }
         }
         dibujaGrid(sizeCuadro.ancho, sizeCuadro.alto, 0.4, "#44414B");
       }
 
-      function addPixel(x, y, color){
-        axios.get('/new_pixel', {
-          params: {
-            x: x,
-            y: y,
-            color: color
-          }
-        }).then(response => {
-          console.log(response)
-          /*
-          servers: [];
-          for(let i=0; i <= response.data.length; i++){
-            app4.servers.push({lastname: response.data[i]["lastname"], surname: response.data[i]["surname"], phone: response.data[i]["phone"]})
-          }
-          */
-        }).catch(e => {
-          console.log(e);
-        })
+      function addPixel(x, y, color) {
+        axios
+          .get("/new_pixel", {
+            params: {
+              x: x,
+              y: y,
+              color: color,
+            },
+          })
+          .then((response) => {
+            console.log(response);
+          })
+          .catch((e) => {
+            console.log(e);
+          });
       }
 
       canvas.onclick = function (e) {
         var canvaspos = canvas.getBoundingClientRect();
-        x_pixel_select = e.clientX - canvaspos.left
-        y_pixel_select = e.clientY - canvaspos.top
+        x_pixel_select = e.clientX - canvaspos.left;
+        y_pixel_select = e.clientY - canvaspos.top;
         color = inputColor.value;
-        console.log('color ', color);
+        console.log("color ", color);
         for (i = 0; i < cuadritos.length; i++) {
           var cuadro = cuadritos[i];
-          if (x_pixel_select > cuadro[0] && x_pixel_select < cuadro[0] + cuadro[2] && y_pixel_select > cuadro[1] && y_pixel_select < cuadro[1] + cuadro[3]) {
+          if (
+            x_pixel_select > cuadro[0] &&
+            x_pixel_select < cuadro[0] + cuadro[2] &&
+            y_pixel_select > cuadro[1] &&
+            y_pixel_select < cuadro[1] + cuadro[3]
+          ) {
             //console.log('cuadro  ', cuadro);
-            x_select = cuadro[4]
-            y_select = cuadro[5]
+            x_select = cuadro[4];
+            y_select = cuadro[5];
             break;
           }
         }
         //fillCell(x_select, y_select);
         //Aqui envia
-        addPixel(x_select, y_select, color)
+        addPixel(x_select, y_select, color);
       };
 
       canvas.onmousedown = function () {
@@ -124,13 +132,42 @@ window.onload = function () {
       alert("No se pudo cargar el contexto");
     }
 
-    var socket = io()
-    socket.on('server/list_art_work', function(list){
-      console.log(list)
-      list.forEach(function(pixel){
-        console.log(list)
-        fillCell(pixel.pixel.x, pixel.pixel.y, pixel.color)
-      })
-  })
+    var socket = io();
+    socket.on("server/list_art_work", function (list) {
+      console.log(list);
+      list.forEach(function (pixel) {
+        console.log(list);
+        fillCell(pixel.pixel.x, pixel.pixel.y, pixel.color);
+      });
+    });
+
+    socket.on("server/list_keys", function (data) {
+      keyData = data;
+      app2.data_keys = [];
+      for (let i = 0; i <= data.length; i++) {
+        app2.data_keys.push({
+          x: data[i]["pixel"]["x"],
+          y: data[i]["pixel"]["y"],
+          id: data[i]["id"],
+        });
+      }
+    });
   }
 };
+
+function validate() {
+  fetch("http://172.17.0.1:3000/keyArtWork")
+    .then((response) => response.json())
+    .then((data) => {
+      console.log(data);
+      console.log(keyData)
+      console.log( _.isEqual(data, keyData) );
+      if( _.isEqual(data, keyData)) {
+        console.log(true)
+        document.getElementById("txtResult").innerHTML = "La obra de arte es real"
+      }else{
+        console.log(false)
+        document.getElementById("txtResult").innerHTML = "La obra de arte es falsa"
+      }
+    });
+}

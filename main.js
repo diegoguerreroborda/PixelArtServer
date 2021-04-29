@@ -1,19 +1,25 @@
 const express = require('express');
 const axios = require('axios');
 const fs = require('fs')
+const cors = require('cors');
+const morgan = require('morgan');
 const lineReader = require('line-reader');
 const bodyParser = require('body-parser');
 const socketio = require('socket.io')
 const http = require('http')
+var path = require('path')
 const app = express()
 const server = http.createServer(app)
 const io = socketio(server)
+var accessLogStream = fs.createWriteStream(path.join(__dirname, 'access.log'), { flags: 'a' })
 
 app.use(express.json({limit: '5mb'}));
 app.use(express.static('public'))
-const PORT = process.argv[2];
+app.use(cors())
+const PORT = process.env.PORT;
+//const PORT = process.argv[2];
 
-let isLeader;
+//let isLeader;
 //PARA INSTANCIAS EN GENERAL
 //Obra de arte
 //[{pixel: {x:5, y:10}, color: 'red'}]
@@ -22,18 +28,24 @@ let artWork = []
 //[{pixel:{x:5, y:10}, id:'50-40-43'}]
 let keyArtWork = []
 //JSON de tareas pendientes (quien la hace, cual es la tarea, pixel a modificar, color)
-//[{server:'localhost:3001', work:'No sé :v', pixel: {x:5, y:10}, color: ffffff}]
+//[{server:'172.17.0.1:3001', work:'No sé :v', pixel: {x:5, y:10}, color: ffffff}]
 let pendingTasks = []
 //Lista de palabras random
 let wordList = ['word1', 'word2', 'word3']
 
 //lista de instancias en general
-let serverList = [{path: "http://localhost:3000/", isLeader:true}, {path: "http://localhost:3001/", isLeader:false}, {path: "http://localhost:3002/", isLeader:false}];
-
+let serverList = [{path: "http://172.17.0.1:3000/", isLeader:true}, {path: "http://172.17.0.1:3001/", isLeader:false}, {path: "http://172.17.0.1:3002/", isLeader:false}, {path: "http://172.17.0.1:3003/", isLeader:false}, {path: "http://172.17.0.1:3004/", isLeader:false}];
+//let serverList = [{path: "http://172.17.0.1:3000/", isLeader:true}, {path: "http://172.17.0.1:3001/", isLeader:false}, {path: "http://172.17.0.1:3002/", isLeader:false}]
+let logger = ''
 //Datos lider
 let wordListCurrent;
 let keyCurrent;
 let countVotes;
+
+morgan.token('host', function(req, res) {
+    return req.hostname;
+});
+app.use(morgan('dev', { stream: accessLogStream }))
 
 function base64_decode(base64str, file) {
     var bitmap = new Buffer(base64str, 'base64');
@@ -109,12 +121,14 @@ async function sendData(dataToSend, afterURL) {
         }).then(response => {
             console.log('Resultado:', response.data)
             if(afterURL == 'file_word_repeat'){
+                logger += `\n*******${new Date()}--Crear el archivo de POW \n`
                 //Solo llega al que le tocó
                 console.log('cuando se crea el archivo nomás')
                 countVotes = 0;
                 sendData(response.data, 'document_pow')
             }
             if(afterURL == 'document_pow'){
+                logger += `\n*******${new Date()}--Votación del nodo ${PORT} \n`
                 //Aqui debe llegar un true o false
                 console.log('Respuesta booleana: ', response.data)
                 if(response.data){
@@ -127,6 +141,8 @@ async function sendData(dataToSend, afterURL) {
         });
     }
     if(afterURL == 'document_pow'){
+        logger += `\n*******${new Date()}--Los votos son: \n`
+        logger += `\n     Los votos confirmando son ${countVotes} de ${serverList.length} posibles. \n`
         console.log(`Los votos confirmando son ${countVotes} de ${serverList.length} posibles.`)
         //Si hay más de la mitad crear el pixel
         countVotesF();
@@ -152,6 +168,7 @@ async function generateNewPixel(x, y, color){
     let result = sortWordRepeated()
     if(result.length != 1){
         //console.log('toca hacerlo de nuevo D:') va para el log!!!
+        logger += `\n*******${new Date()}--Hay más de una palabra más repetida\n`
         generateNewPixel(x, y, color);
         return;
     }
@@ -168,11 +185,32 @@ async function generateNewPixel(x, y, color){
 //PARA EL LIDER
 //Solicitar palabra de cada instancia.
 app.get('/new_pixel', async (req, res) => {
+    logger += `\n*******${new Date()}--Nuevo pixel en la posicion ${req.query.x}, ${req.query.y} de color ${req.query.color} \n`
     console.log(`${req.query.x}---${req.query.y}`)
+    if(PORT == 3000){
+        await generateNewPixel(req.query.x, req.query.y, req.query.color)
+        res.sendStatus(200)
+    }else{
+        //Va para el lider
+        logger += `\n*******${new Date()}--Enviando pixel al lider \n`
+        console.log('Va para el lideerrrr')
+        axios.get('http://172.17.0.1:3000/new_pixel', {
+            params: {
+              x: req.query.x,
+              y: req.query.y,
+              color: req.query.color
+            }
+          }).then(response => {
+            //console.log(response)
+            res.sendStatus(200)
+          }).catch(e => {
+            console.log(e);
+          })
+    }
     //currentX = req.query.x;
     //currentY = req.query.y;
-    await generateNewPixel(req.query.x, req.query.y, req.query.color)
-    res.sendStatus(200)
+    
+    
 })
 
 //consultar copia de la obra de arte.
@@ -185,7 +223,7 @@ app.post('/file_word_repeat', async (req, res) => {
     //guarda la tarea pendiente en todos los servidores
     pendingTasks.push({server:req.body.data.server, work: req.body.data.work, word: req.body.data.word,
         number: req.body.data.number, pixel: req.body.data.pixel, color: req.body.data.color})
-    if(req.body.data.server == `http://localhost:${PORT}/`){
+    if(req.body.data.server == `http://172.17.0.1:${PORT}/`){
         console.log('Este fue')
         createFile(req.body.data.number, req.body.data.word)
         setTimeout(function(){
@@ -251,9 +289,24 @@ app.get('/randomNumber', (req, res) => {
     res.send(`${getRandomInt(0,100)}-`)
 })
 
+app.get('/logger', (req, res) => {
+   res.send(logger)
+})
+
+app.get('/validation_keys', async (req, res) => {
+    let response = await axios(`http://172.17.0.1:3000/keyArtWork`)
+    console.log('Que esss: ',response.data)
+    if(response.data == keyArtWork){
+        res.send(true)
+    }else{
+        res.send(false)
+    }
+})
+
 app.post('/updateData', (req, res) => {
     //crea la copia de seguridad
     //[{pixel:{x:5, y:10}, id:'50-40-43'}]
+    logger += `\n*******${new Date()}--Actualizando data en todos los servidores`
     keyArtWork.push({pixel:{x:pendingTasks[pendingTasks.length-1].pixel.x, y:pendingTasks[pendingTasks.length-1].pixel.y},
          id: req.body.data})
 
@@ -272,9 +325,10 @@ io.on('connection', function (socket) {
     setInterval(() => {
         //socket.emit('server/random', getDateTime())
         socket.emit('server/list_art_work', artWork)
-    }, 3000)
+        socket.emit('server/list_keys', keyArtWork)
+    }, 4000)
 })
 
 server.listen(PORT, () => {
-    console.log(`Example app listening at http://localhost:${PORT}`)
+    console.log(`Example app listening at http://172.17.0.1:${PORT}`)
 })
