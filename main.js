@@ -8,10 +8,10 @@ const bodyParser = require('body-parser');
 const socketio = require('socket.io')
 const http = require('http')
 var path = require('path')
+var dateFormat = require('dateformat');
 const app = express()
 const server = http.createServer(app)
 const io = socketio(server)
-var accessLogStream = fs.createWriteStream(path.join(__dirname, 'access.log'), { flags: 'a' })
 
 app.use(express.json({limit: '5mb'}));
 app.use(express.static('public'))
@@ -36,7 +36,7 @@ let wordList = ['word1', 'word2', 'word3']
 //lista de instancias en general
 let serverList = [{path: "http://172.17.0.1:3000/", isLeader:true}, {path: "http://172.17.0.1:3001/", isLeader:false}, {path: "http://172.17.0.1:3002/", isLeader:false}, {path: "http://172.17.0.1:3003/", isLeader:false}, {path: "http://172.17.0.1:3004/", isLeader:false}];
 //let serverList = [{path: "http://172.17.0.1:3000/", isLeader:true}, {path: "http://172.17.0.1:3001/", isLeader:false}, {path: "http://172.17.0.1:3002/", isLeader:false}]
-let logger = ''
+let logger = []
 //Datos lider
 let wordListCurrent;
 let keyCurrent;
@@ -45,7 +45,6 @@ let countVotes;
 morgan.token('host', function(req, res) {
     return req.hostname;
 });
-app.use(morgan('dev', { stream: accessLogStream }))
 
 function base64_decode(base64str, file) {
     var bitmap = new Buffer(base64str, 'base64');
@@ -97,6 +96,7 @@ async function getData(afterURL){
             let response = await axios(`${serverList[server].path}${afterURL}`)
             console.log(response.data)
             if(afterURL == 'new_word'){
+                logger.push({service:`Palabra es: ${response.data}`, date:dateFormat(new Date(), "dddd, mmmm dS, yyyy, h:MM:ss TT"), host: serverList[server].path})
                 wordListCurrent.push(response.data)
             }
             if(afterURL == 'randomNumber'){
@@ -121,14 +121,14 @@ async function sendData(dataToSend, afterURL) {
         }).then(response => {
             console.log('Resultado:', response.data)
             if(afterURL == 'file_word_repeat'){
-                logger += `\n*******${new Date()}--Crear el archivo de POW \n`
+                logger.push({service:'Crear el archivo de POW', date:dateFormat(new Date(), "dddd, mmmm dS, yyyy, h:MM:ss TT"), host: serverList[server].path})
                 //Solo llega al que le tocó
                 console.log('cuando se crea el archivo nomás')
                 countVotes = 0;
                 sendData(response.data, 'document_pow')
             }
             if(afterURL == 'document_pow'){
-                logger += `\n*******${new Date()}--Votación del nodo ${PORT} \n`
+                logger.push({service:`Voto: ${response.data}`, date:dateFormat(new Date(), "dddd, mmmm dS, yyyy, h:MM:ss TT"), host: serverList[server].path})
                 //Aqui debe llegar un true o false
                 console.log('Respuesta booleana: ', response.data)
                 if(response.data){
@@ -141,8 +141,7 @@ async function sendData(dataToSend, afterURL) {
         });
     }
     if(afterURL == 'document_pow'){
-        logger += `\n*******${new Date()}--Los votos son: \n`
-        logger += `\n     Los votos confirmando son ${countVotes} de ${serverList.length} posibles. \n`
+        logger.push({service:`Los votos confirmando son ${countVotes} de ${serverList.length} posibles.`, date:dateFormat(new Date(), "dddd, mmmm dS, yyyy, h:MM:ss TT"), host: `http://172.17.0.1:${PORT}/`})
         console.log(`Los votos confirmando son ${countVotes} de ${serverList.length} posibles.`)
         //Si hay más de la mitad crear el pixel
         countVotesF();
@@ -168,10 +167,11 @@ async function generateNewPixel(x, y, color){
     let result = sortWordRepeated()
     if(result.length != 1){
         //console.log('toca hacerlo de nuevo D:') va para el log!!!
-        logger += `\n*******${new Date()}--Hay más de una palabra más repetida\n`
+        logger.push({service:'Hay más de una palabra más repetida', date:dateFormat(new Date(), "dddd, mmmm dS, yyyy, h:MM:ss TT"), host: `http://172.17.0.1:${PORT}/`})
         generateNewPixel(x, y, color);
         return;
     }
+    logger.push({service:`La palabra escogida es: ${result[0].name}`, date:dateFormat(new Date(), "dddd, mmmm dS, yyyy, h:MM:ss TT"), host: `http://172.17.0.1:${PORT}/`})
     //registrar en tareas pendientes.
     let numberRandomWrite = getRandomInt(90000, 100000)
     let currentTask = {server:serverList[getRandomInt(0, serverList.length)].path, 
@@ -185,14 +185,15 @@ async function generateNewPixel(x, y, color){
 //PARA EL LIDER
 //Solicitar palabra de cada instancia.
 app.get('/new_pixel', async (req, res) => {
-    logger += `\n*******${new Date()}--Nuevo pixel en la posicion ${req.query.x}, ${req.query.y} de color ${req.query.color} \n`
+    //logger += `\n*******${new Date()}--Nuevo pixel en la posicion ${req.query.x}, ${req.query.y} de color ${req.query.color} \n`
+    logger.push({service:`Nuevo pixel en la posicion ${req.query.x}, ${req.query.y} de color ${req.query.color}`, date:dateFormat(new Date(), "dddd, mmmm dS, yyyy, h:MM:ss TT"), host: `http://172.17.0.1:${PORT}/`})
     console.log(`${req.query.x}---${req.query.y}`)
     if(PORT == 3000){
         await generateNewPixel(req.query.x, req.query.y, req.query.color)
         res.sendStatus(200)
     }else{
         //Va para el lider
-        logger += `\n*******${new Date()}--Enviando pixel al lider \n`
+        logger.push({service:'Enviando pixel al lider', date:dateFormat(new Date(), "dddd, mmmm dS, yyyy, h:MM:ss TT"), host: `http://172.17.0.1:${PORT}/`})
         console.log('Va para el lideerrrr')
         axios.get('http://172.17.0.1:3000/new_pixel', {
             params: {
@@ -201,21 +202,12 @@ app.get('/new_pixel', async (req, res) => {
               color: req.query.color
             }
           }).then(response => {
-            //console.log(response)
             res.sendStatus(200)
           }).catch(e => {
             console.log(e);
           })
     }
-    //currentX = req.query.x;
-    //currentY = req.query.y;
-    
-    
 })
-
-//consultar copia de la obra de arte.
-    //Validar si la copia de seguridad de la instancia es la misma a la de todos los demás
-    //validar si el archivo con los pixeles es igual a la de todos los demás
 
 app.post('/file_word_repeat', async (req, res) => {
     console.log('*********************')
@@ -239,7 +231,7 @@ app.post('/document_pow', async (req, res) => {
     base64_decode(req.body.data, 'validation.txt')
     let pow = await validateProofOfWork(pendingTasks[pendingTasks.length-1].word)
     console.log('pow', pow)
-    if(await pow == pendingTasks[pendingTasks.length-1].number){
+    if(await pow == pendingTasks[pendingTasks.length-1].number){ //3pendingTasks[pendingTasks.length-1].number
         console.log('Siiuuuu')
         res.send(true)
     }else{
@@ -281,6 +273,11 @@ app.get('/keyArtWork', (req, res) => {
     res.send(keyArtWork)
 })
 
+app.post('/keyArtWorkset', (req, res) => {
+    keyArtWork = req.body.keyArtWork;
+    res.send(keyArtWork)
+})
+
 app.get('/pendingTasks', (req, res) => {
     res.send(pendingTasks)
 })
@@ -306,7 +303,7 @@ app.get('/validation_keys', async (req, res) => {
 app.post('/updateData', (req, res) => {
     //crea la copia de seguridad
     //[{pixel:{x:5, y:10}, id:'50-40-43'}]
-    logger += `\n*******${new Date()}--Actualizando data en todos los servidores`
+    logger.push({service:'Pixel registrado en todos los servidores', date:dateFormat(new Date(), "dddd, mmmm dS, yyyy, h:MM:ss TT"), host: `http://172.17.0.1:${PORT}/`})
     keyArtWork.push({pixel:{x:pendingTasks[pendingTasks.length-1].pixel.x, y:pendingTasks[pendingTasks.length-1].pixel.y},
          id: req.body.data})
 
@@ -318,8 +315,6 @@ app.post('/updateData', (req, res) => {
 })
 
 io.on('connection', function (socket) {
-    //socket.disconnected = true;
-    //socket.connected = false;
     console.log(`client: ${socket.id}`)
     //enviando al cliente
     setInterval(() => {
